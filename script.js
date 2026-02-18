@@ -329,26 +329,43 @@ function App() {
     }
   }, [bankInfo, qrCodeUrl, copyState]);
 
-  // Download tất cả phiếu theo tab + search
+  // Download tất cả phiếu theo tab + search — gom vào 1 file ZIP
   const downloadAll = useCallback(async () => {
     const list = filteredStudents;
     if (list.length === 0) return;
+
+    // Tên ZIP: Học phí + tên sheet 1 + tên lớp (lấy từ học sinh đầu tiên)
+    const sheet1Name = sheetNames[0] || "";
+    const className = list[0]?.cls || "lop";
+    const zipName = `Học phí ${sheet1Name} ${className}`.trim();
+
+    const zip = new JSZip();
     setToast({ text: `Đang tạo 0 / ${list.length} phiếu...`, progress: 0 });
+
     for (let i = 0; i < list.length; i++) {
       const s = list[i];
       try {
         const canvas = await renderReceiptToCanvas(s, bankInfo, qrCodeUrl);
-        const link = document.createElement("a");
-        link.download = `${s.name}_${s.cls || "lop"}.png`;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
-        await new Promise(r => setTimeout(r, 200));
+        const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+        const arrayBuffer = await blob.arrayBuffer();
+        zip.file(`${s.name}_${s.cls || "lop"}.png`, arrayBuffer);
       } catch (err) { console.warn("Lỗi:", s.name, err); }
-      setToast({ text: `Đang tạo phiếu ${i + 1} / ${list.length}...`, progress: ((i + 1) / list.length) * 100 });
+      setToast({ text: `Đang tạo phiếu ${i + 1} / ${list.length}...`, progress: ((i + 1) / list.length) * 90 });
     }
-    setToast({ text: `✅ Đã download ${list.length} phiếu!`, progress: 100 });
-    setTimeout(() => setToast(null), 2000);
-  }, [filteredStudents, bankInfo, qrCodeUrl]);
+
+    setToast({ text: `Đang nén file ZIP...`, progress: 95 });
+    try {
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement("a");
+      link.download = `${zipName}.zip`;
+      link.href = URL.createObjectURL(zipBlob);
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (err) { console.error("Lỗi tạo ZIP:", err); }
+
+    setToast({ text: `✅ Đã tạo ZIP với ${list.length} phiếu!`, progress: 100 });
+    setTimeout(() => setToast(null), 2500);
+  }, [filteredStudents, bankInfo, qrCodeUrl, sheetNames]);
 
   const tabLabel = { all: "Tất cả", unpaid: "Chưa thu", paid: "Đã thu" };
   const PINK = "rgba(255,119,160,0.12)";
