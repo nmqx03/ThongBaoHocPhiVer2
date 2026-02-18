@@ -1,4 +1,4 @@
-const { useState, useRef, useCallback, useEffect } = React;
+const { useState, useRef, useCallback, useEffect, useMemo } = React;
 
 // ─── HÀM HỖ TRỢ ──────────────────────────────────────────────────
 function fmt(n) {
@@ -27,6 +27,22 @@ function parseSheet(ws) {
     });
   }
   return students;
+}
+
+// ─── localStorage helpers (theo tên file) ────────────────────────
+const LS_PREFIX = "hocphi_paid_";
+
+function loadPaidFromStorage(fileName) {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + fileName);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function savePaidToStorage(fileName, paidMap) {
+  try {
+    localStorage.setItem(LS_PREFIX + fileName, JSON.stringify(paidMap));
+  } catch {}
 }
 
 // ─── RECEIPT MARKUP ───────────────────────────────────────────────
@@ -80,40 +96,29 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id }) {
   );
 }
 
-// ─── OFF-SCREEN RENDER → CANVAS (tối ưu delay) ───────────────────
-// Dùng MutationObserver để biết React render xong, sau đó chờ
-// một frame để layout ổn định → nhanh hơn nhiều so với setTimeout cố định.
+// ─── OFF-SCREEN RENDER → CANVAS ───────────────────────────────────
 function renderReceiptToCanvas(student, bankInfo, qrCodeUrl) {
   return new Promise((resolve, reject) => {
     const tempContainer = document.createElement("div");
     tempContainer.style.cssText = "position:fixed;left:-9999px;top:0;width:1080px;pointer-events:none;z-index:-1;";
     document.body.appendChild(tempContainer);
-
     const root = ReactDOM.createRoot(tempContainer);
     root.render(React.createElement(ReceiptMarkup, { student, bankInfo, qrCodeUrl }));
 
-    // Quan sát DOM: khi receipt xuất hiện → capture ngay
     const observer = new MutationObserver(() => {
       const el = tempContainer.querySelector('.receipt');
       if (!el) return;
       observer.disconnect();
-
-      // Đợi 1 frame để CSS render xong, sau đó thêm 80ms cho ảnh QR
       requestAnimationFrame(() => {
         setTimeout(() => {
-          window.html2canvas(el, {
-            scale: 2, useCORS: true, allowTaint: true,
-            backgroundColor: "#fff", logging: false
-          })
-          .then((canvas) => { root.unmount(); document.body.removeChild(tempContainer); resolve(canvas); })
-          .catch((err) => { root.unmount(); document.body.removeChild(tempContainer); reject(err); });
+          window.html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#fff", logging: false })
+            .then((canvas) => { root.unmount(); document.body.removeChild(tempContainer); resolve(canvas); })
+            .catch((err) => { root.unmount(); document.body.removeChild(tempContainer); reject(err); });
         }, 80);
       });
     });
-
     observer.observe(tempContainer, { childList: true, subtree: true });
 
-    // Fallback nếu observer không kích hoạt sau 3s
     setTimeout(() => {
       observer.disconnect();
       const el = tempContainer.querySelector('.receipt');
@@ -150,11 +155,19 @@ function CopyIcon({ state }) {
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
-  // loading → hidden by CSS spinner, show faint icon
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff77a0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+// ─── SEARCH ICON ──────────────────────────────────────────────────
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d4a0b4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
     </svg>
   );
 }
@@ -164,14 +177,15 @@ function App() {
   const [sheets, setSheets] = useState({});
   const [sheetNames, setSheetNames] = useState([]);
   const [activeSheet, setActiveSheet] = useState("");
+  const [currentFileName, setCurrentFileName] = useState(""); // tên file hiện tại
   const [selected, setSelected] = useState(null);
   const [preview, setPreview] = useState(false);
   const [bankInfo] = useState({ bank: "Vietinbank", account: "0981802098", owner: "HOANG THU TRANG" });
   const qrCodeUrl = "images/qr1.png";
   const [paidStudents, setPaidStudents] = useState({});
   const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
-  // copyState[key] = "idle" | "loading" | "copied"
   const [copyState, setCopyState] = useState({});
 
   // Auto-scale modal receipt
@@ -195,10 +209,17 @@ function App() {
     return () => window.removeEventListener('resize', scaleReceipt);
   }, [preview, selected]);
 
-  // Upload file
+  // Lưu trạng thái vào localStorage mỗi khi paidStudents thay đổi
+  useEffect(() => {
+    if (!currentFileName) return;
+    savePaidToStorage(currentFileName, paidStudents);
+  }, [paidStudents, currentFileName]);
+
+  // Upload file — load trạng thái cũ nếu có
   const handleFile = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const fileName = file.name; // dùng tên file làm key
     const reader = new FileReader();
     reader.onload = (ev) => {
       const wb = XLSX.read(ev.target.result, { type: "array" });
@@ -207,7 +228,12 @@ function App() {
       setSheetNames([name]);
       setActiveSheet(name);
       setSelected(null);
-      setPaidStudents({});
+      setSearch("");
+      setTab("all");
+      setCurrentFileName(fileName);
+      // Load trạng thái đã lưu cho file này
+      const saved = loadPaidFromStorage(fileName);
+      setPaidStudents(saved);
     };
     reader.readAsArrayBuffer(file);
     e.target.value = '';
@@ -215,27 +241,41 @@ function App() {
 
   const handleReset = useCallback(() => {
     setSheets({}); setSheetNames([]); setActiveSheet("");
-    setSelected(null); setPreview(false); setPaidStudents({});
+    setSelected(null); setPreview(false);
+    setSearch(""); setTab("all");
+    setCurrentFileName("");
+    setPaidStudents({});
   }, []);
 
   const students = sheets[activeSheet] || [];
+
+  // Toggle đã/chưa thu — tự động lưu qua useEffect
   const togglePaid = useCallback((key) => {
     setPaidStudents(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  const filteredStudents = students.filter(s => {
-    const key = `${s.name}-${s.fee}`;
-    const isPaid = paidStudents[key] || false;
-    if (tab === "paid") return isPaid;
-    if (tab === "unpaid") return !isPaid;
-    return true;
-  });
+  // Lọc theo tab + tìm kiếm
+  const filteredStudents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return students.filter(s => {
+      const key = `${s.name}-${s.fee}`;
+      const isPaid = paidStudents[key] || false;
+      if (tab === "paid" && !isPaid) return false;
+      if (tab === "unpaid" && isPaid) return false;
+      if (!q) return true;
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.cls.toLowerCase().includes(q) ||
+        String(s.stt).includes(q)
+      );
+    });
+  }, [students, paidStudents, tab, search]);
 
-  const totalFee = students.reduce((sum, s) => sum + s.fee, 0);
-  const paidList = students.filter(s => paidStudents[`${s.name}-${s.fee}`]);
-  const unpaidList = students.filter(s => !paidStudents[`${s.name}-${s.fee}`]);
-  const collectedFee = paidList.reduce((sum, s) => sum + s.fee, 0);
-  const uncollectedFee = unpaidList.reduce((sum, s) => sum + s.fee, 0);
+  const totalFee = useMemo(() => students.reduce((sum, s) => sum + s.fee, 0), [students]);
+  const paidList = useMemo(() => students.filter(s => paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
+  const unpaidList = useMemo(() => students.filter(s => !paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
+  const collectedFee = useMemo(() => paidList.reduce((sum, s) => sum + s.fee, 0), [paidList]);
+  const uncollectedFee = useMemo(() => unpaidList.reduce((sum, s) => sum + s.fee, 0), [unpaidList]);
 
   // Modal: Save
   const saveImage = useCallback(() => {
@@ -270,13 +310,12 @@ function App() {
     });
   }, []);
 
-  // Row: Copy 1 phiếu — nhanh hơn nhờ renderReceiptToCanvas được tối ưu
+  // Row: Copy 1 phiếu
   const copyOneRow = useCallback(async (e, student) => {
     e.stopPropagation();
     const key = `${student.name}-${student.fee}`;
     const cur = copyState[key];
     if (cur === "loading" || cur === "copied") return;
-
     setCopyState(prev => ({ ...prev, [key]: "loading" }));
     try {
       const canvas = await renderReceiptToCanvas(student, bankInfo, qrCodeUrl);
@@ -290,7 +329,7 @@ function App() {
     }
   }, [bankInfo, qrCodeUrl, copyState]);
 
-  // Download tất cả phiếu theo tab
+  // Download tất cả phiếu theo tab + search
   const downloadAll = useCallback(async () => {
     const list = filteredStudents;
     if (list.length === 0) return;
@@ -312,11 +351,12 @@ function App() {
   }, [filteredStudents, bankInfo, qrCodeUrl]);
 
   const tabLabel = { all: "Tất cả", unpaid: "Chưa thu", paid: "Đã thu" };
-
   const PINK = "rgba(255,119,160,0.12)";
   const GREEN = "rgba(22,163,74,0.1)";
   const RED = "rgba(239,68,68,0.1)";
   const PURPLE = "rgba(139,92,246,0.1)";
+
+  const hasSearch = search.trim().length > 0;
 
   return (
     <>
@@ -326,7 +366,7 @@ function App() {
           <div className="header-left">
             <div className="header-logo-box">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
               </svg>
             </div>
             <span className="header-title">Quản Lý Học Phí</span>
@@ -363,7 +403,8 @@ function App() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            <span>{sheetNames[0]} – Click để đổi file</span>
+            <span>{currentFileName || sheetNames[0]} – Click để đổi file</span>
+            <span className="file-saved-badge">💾 Đã lưu tự động</span>
             <input id="file-input2" className="upload-input" type="file" accept=".xlsx,.xls" onChange={handleFile} />
           </label>
         )}
@@ -386,11 +427,35 @@ function App() {
                 label="Sĩ số lớp" value={students.length} sub="Học sinh" />
             </div>
 
-            {/* Table */}
+            {/* Table section */}
             <div className="table-section">
               <div className="table-header-row">
-                <div className="table-title">Danh sách học sinh ({filteredStudents.length})</div>
+                <div className="table-title">
+                  Danh sách học sinh
+                  <span className="table-count">
+                    {hasSearch ? `${filteredStudents.length} / ${students.length}` : filteredStudents.length}
+                  </span>
+                </div>
                 <div className="table-actions">
+                  {/* Search box */}
+                  <div className="search-wrap">
+                    <SearchIcon />
+                    <input
+                      className="search-input"
+                      type="text"
+                      placeholder="Tìm tên học sinh..."
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                    />
+                    {hasSearch && (
+                      <button className="search-clear" onClick={() => setSearch("")} title="Xoá tìm kiếm">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  {/* Tabs */}
                   <div className="tab-group">
                     {["all","unpaid","paid"].map(t => (
                       <button key={t} className={`tab-btn ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
@@ -398,11 +463,12 @@ function App() {
                       </button>
                     ))}
                   </div>
+                  {/* Download all */}
                   <button className="btn-download-all" onClick={downloadAll} disabled={filteredStudents.length === 0}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    Download tất cả ({filteredStudents.length})
+                    Download ({filteredStudents.length})
                   </button>
                 </div>
               </div>
@@ -422,13 +488,17 @@ function App() {
                   </thead>
                   <tbody>
                     {filteredStudents.length === 0 ? (
-                      <tr><td colSpan="6" className="empty-row">Không có học sinh nào</td></tr>
+                      <tr>
+                        <td colSpan="7" className="empty-row">
+                          {hasSearch ? `Không tìm thấy học sinh nào với "${search}"` : "Không có học sinh nào"}
+                        </td>
+                      </tr>
                     ) : filteredStudents.map((s, i) => {
                       const key = `${s.name}-${s.fee}`;
                       const isPaid = paidStudents[key] || false;
                       const cs = copyState[key] || "idle";
                       return (
-                        <tr key={i} className="student-row" onClick={() => { setSelected(s); setPreview(true); }}>
+                        <tr key={key} className="student-row" onClick={() => { setSelected(s); setPreview(true); }}>
                           <td className="center stt-cell">{i + 1}</td>
                           <td onClick={e => e.stopPropagation()}>
                             <button className={`status-badge ${isPaid ? "paid" : "unpaid"}`} onClick={() => togglePaid(key)}>
@@ -436,7 +506,11 @@ function App() {
                               {isPaid ? "Đã thu" : "Chưa thu"}
                             </button>
                           </td>
-                          <td className="name-cell">{s.name}</td>
+                          <td className="name-cell">
+                            {hasSearch
+                              ? highlightMatch(s.name, search)
+                              : s.name}
+                          </td>
                           <td className="center">{s.sessions}</td>
                           <td className="right price-cell">{fmt(s.pricePerSession)} đ</td>
                           <td className="right total-cell">{fmt(s.fee)} đ</td>
@@ -493,6 +567,20 @@ function App() {
         </div>
       )}
     </>
+  );
+}
+
+// ─── Highlight từ tìm kiếm trong tên ─────────────────────────────
+function highlightMatch(text, query) {
+  if (!query) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <span>
+      {text.slice(0, idx)}
+      <mark className="search-highlight">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </span>
   );
 }
 
