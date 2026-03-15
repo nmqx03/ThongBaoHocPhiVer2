@@ -378,7 +378,8 @@ function App() {
   return (
     <>
       <div className="app">
-        {/* Header */}
+        {/* Header — chỉ hiện khi đã có file */}
+        {sheetNames.length > 0 && (
         <div className="header-bar">
           <div className="header-left">
             <div className="header-logo-box">
@@ -399,19 +400,36 @@ function App() {
             )}
           </div>
         </div>
+        )}
 
         {/* Upload zone */}
         {sheetNames.length === 0 && (
           <div className="upload-section">
-            <label className="upload-zone" htmlFor="file-input">
-              <div className="upload-icon-wrap">
-                <img src="images/excel-icon.png" alt="Excel" style={{ width: 80, height: 48 }}
-                  onError={(e) => { e.target.style.display='none'; e.target.parentElement.innerHTML='📊'; }} />
+            <div className="upload-card">
+              <div className="upload-card-header">
+                <div className="upload-header-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                </div>
+                <div className="upload-header-text">
+                  <div className="upload-card-title">Thông báo học phí</div>
+                  <div className="upload-card-desc">Tạo phiếu thông báo học phí từ Excel</div>
+                </div>
               </div>
-              <div className="upload-title">Click để chọn file Excel</div>
-              <div className="upload-sub">Hỗ trợ .xlsx, .xls</div>
-              <input id="file-input" className="upload-input" type="file" accept=".xlsx,.xls" onChange={handleFile} />
-            </label>
+              <div className="upload-card-divider"></div>
+              <div className="upload-zone-wrap">
+                <label className="upload-zone" htmlFor="file-input">
+                  <div className="upload-excel-icon">
+                    <img src="images/excel-icon.png" alt="Excel"
+                      onError={(e) => { e.target.style.display='none'; }} />
+                  </div>
+                  <div className="upload-title">Click để chọn file Excel</div>
+                  <input id="file-input" className="upload-input" type="file" accept=".xlsx,.xls" onChange={handleFile} />
+                </label>
+              </div>
+            </div>
           </div>
         )}
 
