@@ -18,12 +18,15 @@ function parseSheet(ws) {
     const pricePerSession = Number(row[40]) || 0;
     const fee = Number(row[41]) || 0;
     const cls = row[4] || "";
+    const surcharge = Number(row[44]) || 0;   // Cột AS
+    const note = row[45] ? String(row[45]).trim() : ""; // Cột AT
     if (!name || String(name).trim() === "") continue;
     students.push({
       stt: sttCounter++,
       name: String(name).trim(),
       cls: String(cls).trim(),
-      sessions, pricePerSession, fee
+      sessions, pricePerSession, fee,
+      surcharge, note
     });
   }
   return students;
@@ -31,6 +34,7 @@ function parseSheet(ws) {
 
 // ─── localStorage helpers (theo tên file) ────────────────────────
 const LS_PREFIX = "hocphi_paid_";
+const LS_PREFIX_SUR = "hocphi_sur_";
 
 function loadPaidFromStorage(fileName) {
   try {
@@ -42,6 +46,19 @@ function loadPaidFromStorage(fileName) {
 function savePaidToStorage(fileName, paidMap) {
   try {
     localStorage.setItem(LS_PREFIX + fileName, JSON.stringify(paidMap));
+  } catch {}
+}
+
+function loadSurchargeFromStorage(fileName) {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX_SUR + fileName);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveSurchargeToStorage(fileName, map) {
+  try {
+    localStorage.setItem(LS_PREFIX_SUR + fileName, JSON.stringify(map));
   } catch {}
 }
 
@@ -77,6 +94,17 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id }) {
         <div><div className="receipt-total-label">Tổng học phí</div></div>
         <div className="receipt-total-value">{fmt(student.fee)} VND</div>
       </div>
+      {student.surcharge > 0 && (
+        <div className="receipt-surcharge">
+          <div className="receipt-surcharge-row">
+            <div className="receipt-surcharge-label">Phụ thu</div>
+            <div className="receipt-surcharge-value">{fmt(student.surcharge)} VND</div>
+          </div>
+          {student.note && (
+            <div className="receipt-surcharge-note">{student.note}</div>
+          )}
+        </div>
+      )}
       {bankInfo && (
         <div className="receipt-bank">
           <div className="receipt-bank-title">Thông tin thanh toán</div>
@@ -183,6 +211,7 @@ function App() {
   const [bankInfo] = useState({ bank: "Vietinbank", account: "0981802098", owner: "HOANG THU TRANG" });
   const qrCodeUrl = "images/qr1.png";
   const [paidStudents, setPaidStudents] = useState({});
+  const [paidSurcharge, setPaidSurcharge] = useState({});
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
@@ -215,6 +244,11 @@ function App() {
     savePaidToStorage(currentFileName, paidStudents);
   }, [paidStudents, currentFileName]);
 
+  useEffect(() => {
+    if (!currentFileName) return;
+    saveSurchargeToStorage(currentFileName, paidSurcharge);
+  }, [paidSurcharge, currentFileName]);
+
   // Upload file — load trạng thái cũ nếu có
   const handleFile = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -234,6 +268,8 @@ function App() {
       // Load trạng thái đã lưu cho file này
       const saved = loadPaidFromStorage(fileName);
       setPaidStudents(saved);
+      const savedSur = loadSurchargeFromStorage(fileName);
+      setPaidSurcharge(savedSur);
     };
     reader.readAsArrayBuffer(file);
     e.target.value = '';
@@ -245,6 +281,7 @@ function App() {
     setSearch(""); setTab("all");
     setCurrentFileName("");
     setPaidStudents({});
+    setPaidSurcharge({});
   }, []);
 
   const students = sheets[activeSheet] || [];
@@ -252,6 +289,10 @@ function App() {
   // Toggle đã/chưa thu — tự động lưu qua useEffect
   const togglePaid = useCallback((key) => {
     setPaidStudents(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const toggleSurcharge = useCallback((key) => {
+    setPaidSurcharge(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
   // Lọc theo tab + tìm kiếm
@@ -271,11 +312,19 @@ function App() {
     });
   }, [students, paidStudents, tab, search]);
 
-  const totalFee = useMemo(() => students.reduce((sum, s) => sum + s.fee, 0), [students]);
+  const totalFee = useMemo(() => students.reduce((sum, s) => sum + s.fee + s.surcharge, 0), [students]);
   const paidList = useMemo(() => students.filter(s => paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
   const unpaidList = useMemo(() => students.filter(s => !paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
-  const collectedFee = useMemo(() => paidList.reduce((sum, s) => sum + s.fee, 0), [paidList]);
-  const uncollectedFee = useMemo(() => unpaidList.reduce((sum, s) => sum + s.fee, 0), [unpaidList]);
+  const collectedFee = useMemo(() => {
+    return students.reduce((sum, s) => {
+      const key = `${s.name}-${s.fee}`;
+      let v = 0;
+      if (paidStudents[key]) v += s.fee;
+      if (paidSurcharge[key]) v += s.surcharge;
+      return sum + v;
+    }, 0);
+  }, [students, paidStudents, paidSurcharge]);
+  const uncollectedFee = useMemo(() => totalFee - collectedFee, [totalFee, collectedFee]);
 
   // Modal: Save
   const saveImage = useCallback(() => {
@@ -512,19 +561,26 @@ function App() {
                 <table className="students-table">
                   <thead>
                     <tr>
-                      <th className="center">STT</th>
-                      <th>TRẠNG THÁI</th>
-                      <th>HỌ VÀ TÊN</th>
-                      <th className="center">SỐ BUỔI</th>
-                      <th className="right">HỌC PHÍ / BUỔI</th>
-                      <th className="right">TỔNG HỌC PHÍ</th>
-                      <th className="center">COPY</th>
+                      <th className="center" rowSpan="2">STT</th>
+                      <th rowSpan="2">HỌ VÀ TÊN</th>
+                      <th className="center" rowSpan="2">SỐ BUỔI</th>
+                      <th colSpan="3" className="section-header fee-section-header">💰 HỌC PHÍ</th>
+                      <th colSpan="3" className="section-header sur-section-header">➕ PHỤ THU</th>
+                      <th className="center" rowSpan="2">COPY</th>
+                    </tr>
+                    <tr>
+                      <th className="right">/ BUỔI</th>
+                      <th className="right">TỔNG</th>
+                      <th className="center">TRẠNG THÁI</th>
+                      <th className="right">SỐ TIỀN</th>
+                      <th>CHÚ THÍCH</th>
+                      <th className="center">TRẠNG THÁI</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredStudents.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="empty-row">
+                        <td colSpan="10" className="empty-row">
                           {hasSearch ? `Không tìm thấy học sinh nào với "${search}"` : "Không có học sinh nào"}
                         </td>
                       </tr>
@@ -532,23 +588,39 @@ function App() {
                       const key = `${s.name}-${s.fee}`;
                       const isPaid = paidStudents[key] || false;
                       const cs = copyState[key] || "idle";
+                      const isSurPaid = paidSurcharge[key] || false;
                       return (
                         <tr key={key} className="student-row" onClick={() => { setSelected(s); setPreview(true); }}>
                           <td className="center stt-cell">{i + 1}</td>
-                          <td onClick={e => e.stopPropagation()}>
+                          <td className="name-cell">
+                            {hasSearch ? highlightMatch(s.name, search) : s.name}
+                          </td>
+                          <td className="center">{s.sessions}</td>
+                          {/* ── HỌC PHÍ ── */}
+                          <td className="right price-cell fee-col">{fmt(s.pricePerSession)} đ</td>
+                          <td className="right total-cell fee-col">{fmt(s.fee)} đ</td>
+                          <td className="center fee-col" onClick={e => e.stopPropagation()}>
                             <button className={`status-badge ${isPaid ? "paid" : "unpaid"}`} onClick={() => togglePaid(key)}>
                               <span className="status-dot"></span>
                               {isPaid ? "Đã thu" : "Chưa thu"}
                             </button>
                           </td>
-                          <td className="name-cell">
-                            {hasSearch
-                              ? highlightMatch(s.name, search)
-                              : s.name}
+                          {/* ── PHỤ THU ── */}
+                          <td className="right sur-col">
+                            {s.surcharge > 0 ? <span className="sur-amount">{fmt(s.surcharge)} đ</span> : <span className="sur-empty">—</span>}
                           </td>
-                          <td className="center">{s.sessions}</td>
-                          <td className="right price-cell">{fmt(s.pricePerSession)} đ</td>
-                          <td className="right total-cell">{fmt(s.fee)} đ</td>
+                          <td className="sur-col">
+                            {s.note ? <span className="sur-note">{s.note}</span> : <span className="sur-empty">—</span>}
+                          </td>
+                          <td className="center sur-col" onClick={e => e.stopPropagation()}>
+                            {s.surcharge > 0
+                              ? <button className={`status-badge ${isSurPaid ? "paid" : "unpaid"}`} onClick={() => toggleSurcharge(key)}>
+                                  <span className="status-dot"></span>
+                                  {isSurPaid ? "Đã thu" : "Chưa thu"}
+                                </button>
+                              : <span className="sur-empty">—</span>
+                            }
+                          </td>
                           <td className="center" onClick={e => e.stopPropagation()}>
                             <button
                               className={`copy-btn ${cs === "loading" ? "loading" : cs === "copied" ? "copied" : ""}`}

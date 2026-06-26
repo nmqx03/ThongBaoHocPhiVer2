@@ -524,3 +524,120 @@ mark.search-highlight {
   padding: 0 2px;
   font-weight: 700;
 }
+/* ─── BẢNG 2 SECTION: HỌC PHÍ + PHỤ THU ────────────────────────── */
+.students-table thead tr:first-child th { border-bottom: none; }
+.students-table thead tr:last-child th { border-top: 1px solid #fce4ec; padding-top: 6px; }
+
+/* Header section */
+.section-header {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 10px 12px 6px;
+  border-radius: 6px 6px 0 0;
+}
+.fee-section-header {
+  background: rgba(255, 119, 160, 0.1);
+  color: #c2185b;
+  border-left: 2px solid #ffd6e4;
+  border-right: 2px solid #ffd6e4;
+  border-top: 2px solid #ffd6e4;
+}
+.sur-section-header {
+  background: rgba(251, 146, 60, 0.1);
+  color: #c2410c;
+  border-left: 2px solid #fed7aa;
+  border-right: 2px solid #fed7aa;
+  border-top: 2px solid #fed7aa;
+}
+
+/* Ô dữ liệu trong từng section */
+.fee-col {
+  background: rgba(255, 119, 160, 0.03);
+  border-left: 1px solid #fce4ec;
+}
+.fee-col:last-of-type { border-right: 2px solid #ffd6e4; }
+
+.sur-col {
+  background: rgba(251, 146, 60, 0.03);
+  border-left: 1px solid #fde8d0;
+}
+.sur-col:last-of-type { border-right: 2px solid #fed7aa; }
+
+/* Sub-header ô nhỏ */
+.students-table thead tr:last-child .fee-col-sub {
+  background: rgba(255, 119, 160, 0.07);
+  color: #e91e8c;
+}
+.students-table thead tr:last-child .sur-col-sub {
+  background: rgba(251, 146, 60, 0.07);
+  color: #c2410c;
+}
+
+/* Số tiền phụ thu */
+.sur-amount {
+  font-weight: 700;
+  color: #f97316;
+}
+
+/* Chú thích */
+.sur-note {
+  font-size: 12px;
+  color: #78716c;
+  font-style: italic;
+  max-width: 150px;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ô trống */
+.sur-empty {
+  color: #d1d5db;
+  font-size: 13px;
+}
+
+/* Đường kẻ phân tách giữa các section trong tbody */
+.students-table tbody tr td.fee-col:first-of-type {
+  border-left: 2px solid #ffd6e4;
+}
+.students-table tbody tr td.sur-col:first-of-type {
+  border-left: 2px solid #fed7aa;
+}
+
+/* ─── PHỤ THU TRÊN PHIẾU ──────────────────────────────────────── */
+.receipt-surcharge {
+  display: flex;
+  flex-direction: column;
+  background: #fff8f0;
+  border-radius: 24px;
+  padding: 40px 50px;
+  margin-top: 18px;
+  border: 4px solid #fde8cc;
+}
+.receipt-surcharge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.receipt-surcharge-label {
+  font-size: 32px;
+  color: #4a5568;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.receipt-surcharge-value {
+  font-family: sans-serif;
+  font-size: 46px;
+  font-weight: 700;
+  color: #ff7e05;
+}
+.receipt-surcharge-note {
+  font-size: 34px;
+  color: #718096;
+  font-style: italic;
+  margin-top: 12px;
+}
