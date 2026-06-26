@@ -163,7 +163,7 @@ function renderReceiptToCanvas(student, bankInfo, qrCodeUrl) {
 }
 
 // ─── STAT CARD ────────────────────────────────────────────────────
-function StatCard({ icon, iconBg, label, value, sub }) {
+function StatCard({ icon, iconBg, label, value, sub, split }) {
   return (
     <div className="stat-card">
       <div className="stat-icon" style={{ background: iconBg }}>{icon}</div>
@@ -171,6 +171,20 @@ function StatCard({ icon, iconBg, label, value, sub }) {
         <div className="stat-label">{label}</div>
         <div className="stat-value">{value}</div>
         {sub && <div className="stat-sub">{sub}</div>}
+        {split && (
+          <div className="stat-split">
+            <div className="stat-split-row">
+              <span className="stat-split-tag fee-tag">Học phí</span>
+              <span className="stat-split-val">{split.fee}</span>
+              {split.feeSub && <span className="stat-split-sub">{split.feeSub}</span>}
+            </div>
+            <div className="stat-split-row">
+              <span className="stat-split-tag sur-tag">Phụ phí</span>
+              <span className="stat-split-val">{split.surcharge}</span>
+              {split.surSub && <span className="stat-split-sub">{split.surSub}</span>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -312,19 +326,24 @@ function App() {
     });
   }, [students, paidStudents, tab, search]);
 
-  const totalFee = useMemo(() => students.reduce((sum, s) => sum + s.fee + s.surcharge, 0), [students]);
-  const paidList = useMemo(() => students.filter(s => paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
-  const unpaidList = useMemo(() => students.filter(s => !paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
-  const collectedFee = useMemo(() => {
-    return students.reduce((sum, s) => {
-      const key = `${s.name}-${s.fee}`;
-      let v = 0;
-      if (paidStudents[key]) v += s.fee;
-      if (paidSurcharge[key]) v += s.surcharge;
-      return sum + v;
-    }, 0);
-  }, [students, paidStudents, paidSurcharge]);
-  const uncollectedFee = useMemo(() => totalFee - collectedFee, [totalFee, collectedFee]);
+  // ── Học phí stats ──
+  const totalTuition = useMemo(() => students.reduce((sum, s) => sum + s.fee, 0), [students]);
+  const paidTuitionList = useMemo(() => students.filter(s => paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
+  const unpaidTuitionList = useMemo(() => students.filter(s => !paidStudents[`${s.name}-${s.fee}`]), [students, paidStudents]);
+  const collectedTuition = useMemo(() => paidTuitionList.reduce((sum, s) => sum + s.fee, 0), [paidTuitionList]);
+  const uncollectedTuition = useMemo(() => totalTuition - collectedTuition, [totalTuition, collectedTuition]);
+
+  // ── Phụ phí stats ──
+  const studentsWithSurcharge = useMemo(() => students.filter(s => s.surcharge > 0), [students]);
+  const totalSurcharge = useMemo(() => students.reduce((sum, s) => sum + s.surcharge, 0), [students]);
+  const paidSurchargeList = useMemo(() => studentsWithSurcharge.filter(s => paidSurcharge[`${s.name}-${s.fee}`]), [studentsWithSurcharge, paidSurcharge]);
+  const unpaidSurchargeList = useMemo(() => studentsWithSurcharge.filter(s => !paidSurcharge[`${s.name}-${s.fee}`]), [studentsWithSurcharge, paidSurcharge]);
+  const collectedSurcharge = useMemo(() => paidSurchargeList.reduce((sum, s) => sum + s.surcharge, 0), [paidSurchargeList]);
+  const uncollectedSurcharge = useMemo(() => totalSurcharge - collectedSurcharge, [totalSurcharge, collectedSurcharge]);
+
+  // ── Compat (dùng cho paidList cũ nếu cần) ──
+  const paidList = paidTuitionList;
+  const unpaidList = unpaidTuitionList;
 
   // Modal: Save
   const saveImage = useCallback(() => {
@@ -430,24 +449,33 @@ function App() {
         {/* Header — chỉ hiện khi đã có file */}
         {sheetNames.length > 0 && (
         <div className="header-bar">
-          <div className="header-left">
-            <div className="header-logo-box">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-              </svg>
+          <div className="header-top">
+            <div className="header-left">
+              <div className="header-logo-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </div>
+              <span className="header-title">Quản Lý Học Phí</span>
             </div>
-            <span className="header-title">Quản Lý Học Phí</span>
-          </div>
-          <div className="header-right">
-            {sheetNames.length > 0 && (
+            <div className="header-right">
               <button className="btn-header-reset" onClick={handleReset}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                 </svg>
                 Làm mới
               </button>
-            )}
+            </div>
           </div>
+          <div className="header-divider" />
+          <label className="header-file-row" htmlFor="file-input2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span className="header-file-name">{currentFileName || sheetNames[0]} – Click để đổi file</span>
+            <span className="file-saved-badge">💾 Đã lưu tự động</span>
+            <input id="file-input2" className="upload-input" type="file" accept=".xlsx,.xls" onChange={handleFile} />
+          </label>
         </div>
         )}
 
@@ -482,16 +510,7 @@ function App() {
           </div>
         )}
 
-        {sheetNames.length > 0 && (
-          <label className="file-loaded-bar" htmlFor="file-input2">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            <span>{currentFileName || sheetNames[0]} – Click để đổi file</span>
-            <span className="file-saved-badge">💾 Đã lưu tự động</span>
-            <input id="file-input2" className="upload-input" type="file" accept=".xlsx,.xls" onChange={handleFile} />
-          </label>
-        )}
+
 
         {/* Stat cards */}
         {sheetNames.length > 0 && (
@@ -499,13 +518,15 @@ function App() {
             <div className="stats-grid">
               <StatCard iconBg={PINK}
                 icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ff77a0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
-                label="Tổng cần thu" value={`${fmt(totalFee)} đ`} sub={`${students.length} học sinh`} />
+                label="Tổng cần thu" value={`${fmt(totalTuition + totalSurcharge)} đ`} sub={`${students.length} học sinh`} />
               <StatCard iconBg={GREEN}
                 icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>}
-                label="Đã thu được" value={`${fmt(collectedFee)} đ`} sub={`${paidList.length} học sinh`} />
+                label="Đã thu được" value={`${fmt(collectedTuition + collectedSurcharge)} đ`}
+                split={{ fee: `${fmt(collectedTuition)} đ`, feeSub: `${paidTuitionList.length} hs`, surcharge: `${fmt(collectedSurcharge)} đ`, surSub: `${paidSurchargeList.length} hs` }} />
               <StatCard iconBg={RED}
                 icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
-                label="Chưa thu" value={`${fmt(uncollectedFee)} đ`} sub={`${unpaidList.length} học sinh`} />
+                label="Chưa thu" value={`${fmt(uncollectedTuition + uncollectedSurcharge)} đ`}
+                split={{ fee: `${fmt(uncollectedTuition)} đ`, feeSub: `${unpaidTuitionList.length} hs`, surcharge: `${fmt(uncollectedSurcharge)} đ`, surSub: `${unpaidSurchargeList.length} hs` }} />
               <StatCard iconBg={PURPLE}
                 icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>}
                 label="Sĩ số lớp" value={students.length} sub="Học sinh" />
@@ -562,18 +583,18 @@ function App() {
                   <thead>
                     <tr>
                       <th className="center" rowSpan="2">STT</th>
-                      <th rowSpan="2">HỌ VÀ TÊN</th>
-                      <th className="center" rowSpan="2">SỐ BUỔI</th>
-                      <th colSpan="3" className="section-header fee-section-header">💰 HỌC PHÍ</th>
+                      <th className="center" rowSpan="2">HỌ VÀ TÊN</th>
+                      <th colSpan="4" className="section-header fee-section-header">💰 HỌC PHÍ</th>
                       <th colSpan="3" className="section-header sur-section-header">➕ PHỤ THU</th>
                       <th className="center" rowSpan="2">COPY</th>
                     </tr>
                     <tr>
-                      <th className="right">/ BUỔI</th>
-                      <th className="right">TỔNG</th>
+                      <th className="center">SỐ BUỔI</th>
+                      <th className="center">HỌC PHÍ / BUỔI</th>
+                      <th className="center">TỔNG</th>
                       <th className="center">TRẠNG THÁI</th>
-                      <th className="right">SỐ TIỀN</th>
-                      <th>CHÚ THÍCH</th>
+                      <th className="center">SỐ TIỀN</th>
+                      <th className="center">CHÚ THÍCH</th>
                       <th className="center">TRẠNG THÁI</th>
                     </tr>
                   </thead>
@@ -595,8 +616,8 @@ function App() {
                           <td className="name-cell">
                             {hasSearch ? highlightMatch(s.name, search) : s.name}
                           </td>
-                          <td className="center">{s.sessions}</td>
                           {/* ── HỌC PHÍ ── */}
+                          <td className="center fee-col">{s.sessions}</td>
                           <td className="right price-cell fee-col">{fmt(s.pricePerSession)} đ</td>
                           <td className="right total-cell fee-col">{fmt(s.fee)} đ</td>
                           <td className="center fee-col" onClick={e => e.stopPropagation()}>
