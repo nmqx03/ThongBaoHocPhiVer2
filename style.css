@@ -364,6 +364,7 @@ body {
 .receipt-logo { max-width: 500px; height: auto; margin: 0 auto 16px; display: block; }
 .receipt-addr { font-size: 28px; color: #718096; }
 .receipt-title { font-size: 50px; font-weight: 700; color: #ff7e06; letter-spacing: 1px; text-transform: uppercase; }
+.receipt-period { font-size: 30px; font-weight: 600; color: #2d3748; letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; }
 .receipt-info {
   display: grid; grid-template-columns: 1fr 1fr; gap: 30px 50px;
   background: #fff8f0; border-radius: 24px; padding: 40px 50px;

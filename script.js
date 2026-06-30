@@ -63,7 +63,7 @@ function saveSurchargeToStorage(fileName, map) {
 }
 
 // ─── RECEIPT MARKUP ───────────────────────────────────────────────
-function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id }) {
+function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id, periodLabel }) {
   return (
     <div className="receipt" id={id || undefined}>
       <div className="receipt-header">
@@ -71,6 +71,7 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id }) {
           onError={(e) => { e.target.style.display = 'none'; }} />
         <div className="receipt-addr">Số điện thoại: 0981.802.098 - Mrs.Trang</div>
         <div className="receipt-title">Thông Báo Học Phí</div>
+        {periodLabel && <div className="receipt-period">{periodLabel}</div>}
       </div>
       <div className="receipt-info">
         <div className="info-item">
@@ -131,13 +132,13 @@ function ReceiptMarkup({ student, bankInfo, qrCodeUrl, id }) {
 }
 
 // ─── OFF-SCREEN RENDER → CANVAS ───────────────────────────────────
-function renderReceiptToCanvas(student, bankInfo, qrCodeUrl) {
+function renderReceiptToCanvas(student, bankInfo, qrCodeUrl, periodLabel) {
   return new Promise((resolve, reject) => {
     const tempContainer = document.createElement("div");
     tempContainer.style.cssText = "position:fixed;left:-9999px;top:0;width:1080px;pointer-events:none;z-index:-1;";
     document.body.appendChild(tempContainer);
     const root = ReactDOM.createRoot(tempContainer);
-    root.render(React.createElement(ReceiptMarkup, { student, bankInfo, qrCodeUrl }));
+    root.render(React.createElement(ReceiptMarkup, { student, bankInfo, qrCodeUrl, periodLabel }));
 
     const observer = new MutationObserver(() => {
       const el = tempContainer.querySelector('.receipt');
@@ -392,7 +393,7 @@ function App() {
     if (cur === "loading" || cur === "copied") return;
     setCopyState(prev => ({ ...prev, [key]: "loading" }));
     try {
-      const canvas = await renderReceiptToCanvas(student, bankInfo, qrCodeUrl);
+      const canvas = await renderReceiptToCanvas(student, bankInfo, qrCodeUrl, sheetNames[0]);
       const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
       await navigator.clipboard.write([new window.ClipboardItem({ "image/png": blob })]);
       setCopyState(prev => ({ ...prev, [key]: "copied" }));
@@ -401,7 +402,7 @@ function App() {
       setCopyState(prev => ({ ...prev, [key]: "idle" }));
       alert("⚠️ Không thể copy. Thử mở phiếu và copy từ modal.");
     }
-  }, [bankInfo, qrCodeUrl, copyState]);
+  }, [bankInfo, qrCodeUrl, copyState, sheetNames]);
 
   // Download tất cả phiếu theo tab + search — gom vào 1 file ZIP
   const downloadAll = useCallback(async () => {
@@ -419,7 +420,7 @@ function App() {
     for (let i = 0; i < list.length; i++) {
       const s = list[i];
       try {
-        const canvas = await renderReceiptToCanvas(s, bankInfo, qrCodeUrl);
+        const canvas = await renderReceiptToCanvas(s, bankInfo, qrCodeUrl, sheet1Name);
         const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
         const arrayBuffer = await blob.arrayBuffer();
         zip.file(`${s.name}_${s.cls || "lop"}.png`, arrayBuffer);
@@ -678,7 +679,7 @@ function App() {
             </div>
             <div style={{ background: "#fff8fb", overflow: "hidden", display: "flex", justifyContent: "center", alignItems: "flex-start", maxHeight: "calc(90vh - 140px)" }}>
               <div className="receipt-display-wrapper" id="receipt-display-container">
-                <ReceiptMarkup student={selected} bankInfo={bankInfo} qrCodeUrl={qrCodeUrl} id="receipt-print" />
+                <ReceiptMarkup student={selected} bankInfo={bankInfo} qrCodeUrl={qrCodeUrl} id="receipt-print" periodLabel={sheetNames[0]} />
               </div>
             </div>
             <div className="modal-actions">
